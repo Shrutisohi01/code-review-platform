@@ -1,0 +1,15 @@
+node_modules
+.next
+.env
+.env.*
+!.env.example
+.jev-decision-check.json
+*.log
+
+# personal / generated
+resume/
+*.tsbuildinfo
+next-env.d.ts
+.claude/settings.local.json
+.DS_Store
+coverage
