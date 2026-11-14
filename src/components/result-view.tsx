@@ -15,12 +15,30 @@ const SEV_STYLE: Record<Severity, string> = {
 };
 type State = "open" | "resolved" | "ignored";
 
-export function ResultView({ result }: { result: ReviewResult }) {
+export function ResultView({ result, initialStates }: { result: ReviewResult; initialStates?: Record<string, "RESOLVED" | "IGNORED"> }) {
   const [sev, setSev] = useState<Severity | "all">("all");
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [state, setState] = useState<Record<string, State>>({});
+  const [state, setState] = useState<Record<string, State>>(() =>
+    Object.fromEntries(Object.entries(initialStates ?? {}).map(([id, st]) => [id, st === "RESOLVED" ? "resolved" : "ignored"] as const)),
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  /** Updates the UI at once and saves it for stored reviews; reverts if the save fails. */
+  function setFindingState(id: string, next: State) {
+    const prev = state[id] ?? "open";
+    setState((s) => ({ ...s, [id]: next }));
+    if (!result.review_id) return;
+    setSaveError(null);
+    fetch(`/api/history/${result.review_id}/findings/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next === "open" ? null : next === "resolved" ? "RESOLVED" : "IGNORED" }),
+    })
+      .then((r) => { if (!r.ok) throw new Error(); })
+      .catch(() => { setState((s) => ({ ...s, [id]: prev })); setSaveError("Could not save that change. Try again."); });
+  }
   const [fileIdx, setFileIdx] = useState(0);
   const editor = useRef<any>(null);
   const monaco = useRef<any>(null);
@@ -108,6 +126,7 @@ export function ResultView({ result }: { result: ReviewResult }) {
               <option value="all">All categories</option>{["bug", "security", "performance", "maintainability"].map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
+          {saveError && <p role="alert" className="px-3 py-1 text-xs text-red-500">{saveError}</p>}
           <ul className="overflow-auto">
             {shown.length === 0 && <li className="p-6 text-center text-sm muted">{result.findings.length ? "No findings match the filters." : "Nothing was flagged."}</li>}
             {shown.map((f) => {
@@ -124,8 +143,8 @@ export function ResultView({ result }: { result: ReviewResult }) {
                       <FindingDetails finding={f} />
                       <div className="flex gap-2 text-xs">
                         <button className="panel inline-flex items-center gap-1 px-2 py-1" onClick={() => navigator.clipboard.writeText(`${f.title}\n${f.file_path}:${f.start_line}-${f.end_line}\n${f.description}`)}><Copy size={12} /> Copy summary</button>
-                        <button className="panel inline-flex items-center gap-1 px-2 py-1" onClick={() => setState({ ...state, [f.id]: st === "resolved" ? "open" : "resolved" })}><Check size={12} /> {st === "resolved" ? "Reopen" : "Resolve"}</button>
-                        <button className="panel inline-flex items-center gap-1 px-2 py-1" onClick={() => setState({ ...state, [f.id]: st === "ignored" ? "open" : "ignored" })}><EyeOff size={12} /> {st === "ignored" ? "Unignore" : "Ignore"}</button>
+                        <button className="panel inline-flex items-center gap-1 px-2 py-1" onClick={() => setFindingState(f.id, st === "resolved" ? "open" : "resolved")}><Check size={12} /> {st === "resolved" ? "Reopen" : "Resolve"}</button>
+                        <button className="panel inline-flex items-center gap-1 px-2 py-1" onClick={() => setFindingState(f.id, st === "ignored" ? "open" : "ignored")}><EyeOff size={12} /> {st === "ignored" ? "Unignore" : "Ignore"}</button>
                       </div>
                     </div>
                   )}

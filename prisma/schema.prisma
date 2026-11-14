@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Auth.js (database sessions) ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  reviews  Review[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// --- Review history ---
+
+model Review {
+  id         String   @id @default(cuid())
+  userId     String
+  mode       String // paste | upload | diff
+  analysis   String // jev_only | standard | thorough
+  focus      String
+  filename   String?
+  inputBytes Int
+  // Submitted code is stored so the owner can reopen the review with highlights.
+  // Deleting the review deletes it. Never exposed to other users.
+  source     String   @db.Text
+  status     String // complete | incomplete
+  provider   String
+  assessment String?
+  findingCount Int    @default(0)
+  result     Json
+  createdAt  DateTime @default(now())
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  findings FindingState[]
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+enum FindingStatus {
+  RESOLVED
+  IGNORED
+}
+
+model FindingState {
+  reviewId  String
+  findingId String
+  status    FindingStatus
+  updatedAt DateTime      @updatedAt
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, findingId])
+}

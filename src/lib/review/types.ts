@@ -86,6 +86,8 @@ export const reviewResult = z.object({
   data_sent_to: z.array(z.enum(["jev", "anthropic"])).default([]),
   /** True when this response was served from the duplicate-submission cache (no new provider calls). */
   cached: z.boolean().default(false),
+  /** Id of the stored review (set by the API once persisted). */
+  review_id: z.string().nullable().default(null),
 });
 export type ReviewResult = z.infer<typeof reviewResult>;
 

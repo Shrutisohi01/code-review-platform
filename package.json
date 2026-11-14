@@ -10,13 +10,22 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "jev:verify": "tsx --env-file-if-exists=.env.local scripts/verify-jev.ts",
-    "jev:decision": "tsx --env-file-if-exists=.env.local scripts/verify-jev.ts --decision"
+    "jev:decision": "tsx --env-file-if-exists=.env.local scripts/verify-jev.ts --decision",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
+    "@auth/prisma-adapter": "^2.11.3",
     "@monaco-editor/react": "^4.7.0",
+    "@neondatabase/serverless": "^1.2.1",
+    "@prisma/adapter-neon": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "lucide-react": "^1.66.0",
     "next": "^16.4.4",
+    "next-auth": "^5.0.0-beta.32",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"
@@ -27,6 +36,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "postcss": "^8.5.32",
+    "prisma": "^7.10.1",
     "tailwindcss": "^4.3.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

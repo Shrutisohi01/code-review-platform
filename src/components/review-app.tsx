@@ -27,7 +27,6 @@ function detectLanguage(name: string): string {
 interface Capabilities {
   jevConfigured: boolean;
   claude: { available: true; model: string | null } | { available: false; reason: string };
-  accessTokenRequired: boolean;
 }
 
 const MODE_INFO: Record<AnalysisMode, { label: string; note: string }> = {
@@ -40,7 +39,6 @@ export function ReviewApp() {
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisMode>("jev_only");
   const [confirmThorough, setConfirmThorough] = useState(false);
-  const [token, setToken] = useState("");
   const submitting = useRef(false);
   const [mode, setMode] = useState<Mode>("paste");
   const [language, setLanguage] = useState("typescript");
@@ -58,7 +56,6 @@ export function ReviewApp() {
       setCaps(c);
       if (c.claude.available && c.jevConfigured) setAnalysis("standard");
     }).catch(() => setCaps(null));
-    try { setToken(sessionStorage.getItem("review-token") ?? ""); } catch { /* storage unavailable */ }
   }, []);
 
   const claudeOk = !!caps?.claude.available;
@@ -86,10 +83,7 @@ export function ReviewApp() {
     try {
       const filename = mode === "paste" ? `snippet.${EXT[language] ?? "txt"}` : upload?.name ?? "";
       const body = mode === "diff" ? { mode, diff, focus, analysis } : { mode, filename, code: content, focus, analysis };
-      try { sessionStorage.setItem("review-token", token); } catch { /* storage unavailable */ }
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch("/api/reviews", { method: "POST", headers, body: JSON.stringify(body), signal: ctrl.current.signal });
+      const res = await fetch("/api/reviews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.current.signal });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Review failed.");
       setResult(data);
@@ -162,11 +156,6 @@ export function ReviewApp() {
             Code is sent to JEV{analysis !== "jev_only" ? " and to Anthropic (Claude)" : ""} for processing, with best-effort masking of obvious secrets (it does not catch every secret). Do not submit code you are not allowed to share. Suggested code is never applied automatically.
           </p>
         </fieldset>
-        {caps?.accessTokenRequired && (
-          <label className="flex items-center gap-2 text-sm">Access token
-            <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} className="panel px-2 py-1" />
-          </label>
-        )}
 
         <div className="flex items-center gap-3 text-sm">
           <span className={tooBig ? "text-red-500" : "muted"}>{bytes.toLocaleString()} / {MAX_INPUT_BYTES.toLocaleString()} bytes</span>

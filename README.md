@@ -20,10 +20,10 @@ Nothing in this project claims anything about JEV's accuracy, architecture, or s
 | 1 | JEV integration: config, client, errors, schemas, verification scripts | Done. Verified against the real API: one model-list call and one decision call |
 | 2 | Next.js app, paste/upload/diff input, diff parser, review engine, findings UI | Done for direct review. Results screen not yet checked in a browser with live data |
 | 2b | Claude analysis layer (JEV-only / standard / thorough), cost controls, shared-token access control, duplicate-submission protection | Implemented and unit-tested with mocked providers. Not exercised against the live Anthropic API or in a browser with live data. See section 14 |
-| 3 | Authentication (per-user), database, persistent review history, saved resolve/ignore | Not started |
+| 3 | Authentication (per-user), database, persistent review history, saved resolve/ignore | Code written (section 15), typecheck, build and mocked tests pass. Not run against a real Neon database or GitHub OAuth yet: no migration applied, no sign-in tried |
 | 4 | GitHub App connection, repo and PR listing, read-only PR review | Not started |
 | 5 | Publishing inline PR comments with approval, idempotency, stale revisions | Not started |
-| 6 | Production hardening, deployment docs | Partial: 63 tests (mocked), typecheck and production build pass |
+| 6 | Production hardening, deployment docs | Partial: 67 tests (mocked), typecheck and production build pass |
 
 Not implemented anywhere yet: per-user authentication (only a shared access token exists, section 14), database/Prisma, history and dashboard pages, GitHub integration, webhooks, job queue, theme toggle (the UI follows the OS light/dark setting), shadcn/ui, accessibility audit, linting.
 
@@ -284,7 +284,7 @@ If `JEV_AI_API_KEY` is empty, the engine uses a deterministic placeholder. It ma
 - The Authorization header is never logged. JEV error text and exception messages are discarded; users see fixed messages per error kind.
 - The destination is pinned. Redirects are disabled for JEV calls, so a redirect cannot send the key elsewhere.
 - Submitted code is treated as untrusted data. It is passed in `state`, and every question tells the model to ignore instructions inside it. This reduces prompt-injection risk but cannot guarantee immunity, and a malicious comment could still influence an answer.
-- Code is never executed. Reviews are not stored (no database yet). Nothing is logged about submitted code.
+- Code is never executed. Since phase 3, each review and its submitted code are stored for the signed-in owner only (section 15) and can be deleted by them. Nothing is logged about submitted code.
 - **Disclosure:** source code submitted for review is sent to the JEV API (jev-ai.pro) for analysis. The page header says so, and when Claude analysis is used the code is also sent to Anthropic (section 14). Check JEV's own terms for how it handles data; this project does not know its retention policy.
 - Request size, file type, rate and question-count limits are enforced.
 - No repository writes, commits, merges or comments are made anywhere.
@@ -441,3 +441,30 @@ Submitted code is sent to JEV, and in `standard`/`thorough` also to Anthropic. B
 ### Tests
 
 `npm test` (63 tests, all mocked, no keys or network): config and missing-key behaviour, request construction, structured-response validation, validated/rejected/unresolved candidates, invalid line references and file paths, prompt-injection text, redaction, standard mode skipping Claude, thorough mode independent findings and dedup, provider disagreements, request and budget limits, failures/timeouts/uncertain outcomes, duplicate submissions, access control, rate and daily limits, JEV-only operation, and rendering of the new finding fields and usage notices.
+
+---
+
+## 15. Phase 3: accounts, database and history
+
+Status: written and mocked-tested only. Nothing here has run against a real Neon database or a real GitHub OAuth app yet.
+
+- **Stack:** Neon Postgres, Prisma 7 (`prisma/schema.prisma`, `prisma.config.ts`, Neon driver adapter in `src/lib/db/index.ts`; the generated client in `src/generated/` is Git-ignored and built by `postinstall`), Auth.js v5 beta (`next-auth@beta`) with GitHub sign-in and database sessions (`src/lib/auth/index.ts`).
+- **Next.js 16 notes (from the bundled docs):** the `middleware` convention is now `proxy`, and the docs advise checking auth close to the data. Every route and page therefore calls `currentUser()` itself; there is no proxy file.
+- **Models:** `User`, `Account`, `Session`, `VerificationToken` (Auth.js), `Review` (input metadata, submitted code, result JSON), `FindingState` (resolved/ignored per finding).
+- **Ownership:** every function in `src/lib/reviews/store.ts` filters on the session's user id. A review that is missing and one owned by someone else give the same 404. Covered by `tests/store.test.ts`.
+- **API:** `POST /api/reviews` requires sign-in (401 otherwise) and saves the result (`review_id` in the response; a failed save does not discard a paid-for review). `GET /api/history?q=`, `GET|DELETE /api/history/[id]`, `PUT /api/history/[id]/findings/[findingId]`.
+- **UI:** `/signin`, `/history` (search by file name, counts from stored data), `/history/[id]` (reopen, delete). Resolve/ignore is saved for stored reviews.
+- **Removed:** the shared access-token field in the UI. `src/lib/security/access.ts` is no longer used by the route and is slated for removal.
+- **Stored data:** the submitted code is stored with each review so it can be reopened. This is a decision to revisit before a public launch (retention period, encryption at rest, a "do not store code" option).
+
+### Setup
+
+1. Create a Neon project, then put the pooled string in `DATABASE_URL` and the direct string in `DIRECT_URL` in `.env.local`.
+2. Create a GitHub OAuth app (callback `http://localhost:3000/api/auth/callback/github`) and set `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET` and `AUTH_SECRET` (`openssl rand -base64 32`).
+3. `npm run db:migrate` (first run creates the tables), then `npm run dev`.
+
+### Still open in phase 3
+
+- Per-user quotas and a shared (not in-memory) rate limiter and dedupe store.
+- Account deletion, data export and a retention policy.
+- Real-environment verification of everything above.
